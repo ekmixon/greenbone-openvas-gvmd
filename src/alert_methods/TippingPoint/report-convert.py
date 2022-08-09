@@ -107,91 +107,87 @@ def get_hosts (xml_tree):
 #
 # Convert an XML element tree to an TippingPoint CSV file
 #
-def convert (xml_tree, out_file):
-  hosts = get_hosts (xml_tree);
+def convert(xml_tree, out_file):
+    hosts = get_hosts (xml_tree);
 
-  write_csv (('IP_ADDRESS',       # Required data
-              'CVE_IDS',
-              'SEVERITY',
-              'MAC_ADDRESS',      # Optional asset data
-              'HOST_NAME',
-              'PORT',
-              'VULNERABILITY_ID', # Optional vulnerability data
-              'VULNERABILITY_TITLE',
-              'CVSS_SCORE',
-              'DESCRIPTION',
-              'SOLUTION'),
-              out_file)
+    write_csv (('IP_ADDRESS',       # Required data
+                'CVE_IDS',
+                'SEVERITY',
+                'MAC_ADDRESS',      # Optional asset data
+                'HOST_NAME',
+                'PORT',
+                'VULNERABILITY_ID', # Optional vulnerability data
+                'VULNERABILITY_TITLE',
+                'CVSS_SCORE',
+                'DESCRIPTION',
+                'SOLUTION'),
+                out_file)
 
-  result_elems = xml_tree.xpath ('results/result');
-  for result_elem in result_elems:
-    severity_elem = result_elem.find ('severity');
-    cvss = None;
-    if (severity_elem is not None):
-      cvss = severity_elem.text
-    if (not (float (cvss) > 0.0)):
-      continue;
-    ip = result_elem.find ('host').text
-    description = result_elem.find ('description').text
+    result_elems = xml_tree.xpath ('results/result');
+    for result_elem in result_elems:
+        severity_elem = result_elem.find ('severity');
+        cvss = None;
+        if (severity_elem is not None):
+          cvss = severity_elem.text
+        if float(cvss) <= 0.0:
+            continue;
+        ip = result_elem.find ('host').text
+        description = result_elem.find ('description').text
 
-    nvt_cve = '';
-    nvt_elem = result_elem.find ('nvt')
-    nvt_refs = nvt_elem.find ('refs');
-    for ref in nvt_refs.findall('ref'):
-      if (ref.attrib['type'] == 'cve'):
-        if (nvt_cve == ''):
-          nvt_cve = ref.attrib['id'];
-        else:
-          nvt_cve = nvt_cve + ', ' + ref.attrib['id'];
+        nvt_cve = '';
+        nvt_elem = result_elem.find ('nvt')
+        nvt_refs = nvt_elem.find ('refs');
+        for ref in nvt_refs.findall('ref'):
+            if (ref.attrib['type'] == 'cve'):
+                if (nvt_cve == ''):
+                    nvt_cve = ref.attrib['id'];
+                else:
+                    nvt_cve = f'{nvt_cve}, ' + ref.attrib['id'];
 
-    if (nvt_cve == '' or nvt_cve is None):
-      continue;
+        if (nvt_cve == '' or nvt_cve is None):
+          continue;
 
-    nvt_oid = nvt_elem.attrib['oid']
-    nvt_name = nvt_elem.find ('name').text;
-    tp_severity = cvss_to_tp_severity (cvss);
+        nvt_oid = nvt_elem.attrib['oid']
+        nvt_name = nvt_elem.find ('name').text;
+        tp_severity = cvss_to_tp_severity (cvss);
 
-    port = result_elem.find ('port').text
-    port_number = port.split('/')[0];
-    if (port_number.isdigit()):
-      port_number = int (port_number)
-    else:
-      port_number = ''
+        port = result_elem.find ('port').text
+        port_number = port.split('/')[0];
+        port_number = int (port_number) if (port_number.isdigit()) else ''
+        tags_array = nvt_elem.find ('tags').text.split('|')
+        tags = {}
+        for tag in tags_array:
+          tag_split = tag.split ('=', 1)
+          tags[tag_split[0]] = tag_split[1]
 
-    tags_array = nvt_elem.find ('tags').text.split('|')
-    tags = {}
-    for tag in tags_array:
-      tag_split = tag.split ('=', 1)
-      tags[tag_split[0]] = tag_split[1]
+        solution = ''
+        if ('solution' in tags):
+          solution = tags['solution']
 
-    solution = ''
-    if ('solution' in tags):
-      solution = tags['solution']
+        hostname = ''
+        mac = ''
+        if (ip in hosts):
+          if "hostname" in hosts[ip]:
+            hostname = hosts[ip]["hostname"]
+          if "MAC" in hosts[ip]:
+            mac = hosts[ip]["hostname"]
 
-    hostname = ''
-    mac = ''
-    if (ip in hosts):
-      if "hostname" in hosts[ip]:
-        hostname = hosts[ip]["hostname"]
-      if "MAC" in hosts[ip]:
-        mac = hosts[ip]["hostname"]
+        write_csv ((
+                    to_csv_data (ip, 50),
+                    to_csv_data (nvt_cve, 2000),
+                    to_csv_data (tp_severity, 10),
+                    to_csv_data (hostname, 100),
+                    to_csv_data (mac, 250),
+                    to_csv_data (port_number, 5),
+                    to_csv_data (nvt_oid, 150),
+                    to_csv_data (nvt_name, 250),
+                    to_csv_data (cvss, 5),
+                    to_csv_data (description, 5000),
+                    to_csv_data (solution, 2000)
+                   ),
+                   out_file)
 
-    write_csv ((
-                to_csv_data (ip, 50),
-                to_csv_data (nvt_cve, 2000),
-                to_csv_data (tp_severity, 10),
-                to_csv_data (hostname, 100),
-                to_csv_data (mac, 250),
-                to_csv_data (port_number, 5),
-                to_csv_data (nvt_oid, 150),
-                to_csv_data (nvt_name, 250),
-                to_csv_data (cvss, 5),
-                to_csv_data (description, 5000),
-                to_csv_data (solution, 2000)
-               ),
-               out_file)
-
-  return
+    return
 
 #
 # Main startup function
